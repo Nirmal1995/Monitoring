@@ -1,0 +1,18 @@
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'default'
+
+receivers:
+  - name: 'default'
+    # For real notifications, configure email/slack/webhook here.
+    # Local lab: alerts just appear in the Alertmanager UI.
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']

@@ -1,0 +1,71 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "CPU Usage %",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "refId": "A"
+        }
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent", "max": 100, "min": 0}}
+    },
+    {
+      "type": "stat",
+      "title": "Memory Used %",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
+      "targets": [
+        {
+          "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+          "refId": "A"
+        }
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent", "max": 100, "min": 0}}
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU Usage Over Time",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "targets": [
+        {
+          "expr": "100 - (avg by(instance, mode) (rate(node_cpu_seconds_total{mode!=\"idle\"}[5m])) * 100)",
+          "legendFormat": "{{mode}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "type": "timeseries",
+      "title": "Network I/O",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+      "targets": [
+        {
+          "expr": "rate(node_network_receive_bytes_total{device!=\"lo\"}[5m])",
+          "legendFormat": "RX {{device}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(node_network_transmit_bytes_total{device!=\"lo\"}[5m])",
+          "legendFormat": "TX {{device}}",
+          "refId": "B"
+        }
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "Bps"}}
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "tags": ["lab", "host"],
+  "time": {"from": "now-30m", "to": "now"},
+  "title": "Host Overview",
+  "uid": "host-overview",
+  "version": 1
+}
