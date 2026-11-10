@@ -1,0 +1,38 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Environment and secrets: never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local logs written by scripts/
+.logs/
+*.log
+
+# Local database snapshots (e.g. Redis started from the repo directory)
+dump.rdb
+
+# Test artifacts
+playwright-report/
+test-results/
+
+# Media: never commit real videos or generated HLS output
+samples/
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.m3u8
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

@@ -1,0 +1,129 @@
+﻿
+===== OS =====
+
+
+Caption        : Microsoft Windows 11 Home Single Language
+Version        : 10.0.26200
+BuildNumber    : 26200
+OSArchitecture : 64-bit
+
+
+
+
+
+===== CPU =====
+
+
+Name                          : AMD Ryzen 5 3500U with Radeon Vega Mobile Gfx  
+NumberOfCores                 : 4
+NumberOfLogicalProcessors     : 8
+VirtualizationFirmwareEnabled : True
+
+
+
+
+
+===== RAM (GB) =====
+13.9
+
+
+===== Disks =====
+
+Name UsedGB FreeGB
+---- ------ ------
+C       183   54.2
+D     426.3  114.6
+E       137   58.3
+F     181.8   13.6
+
+
+
+
+===== WSL status =====
+Default Distribution: Ubuntu
+Default Version: 2
+
+
+===== WSL version =====
+WSL version: 2.6.3.0
+Kernel version: 6.6.87.2-1
+WSLg version: 1.0.71
+MSRDC version: 1.2.6353
+Direct3D version: 1.611.1-81528511
+DXCore version: 10.0.26100.1-240331-1435.ge-release
+Windows version: 10.0.26200.9711
+
+
+===== WSL distros =====
+  NAME      STATE           VERSION
+* Ubuntu    Running         2
+
+
+===== .wslconfig =====
+not present
+
+
+===== Windows PATH: node =====
+C:\Program Files\nodejs\node.exe
+v20.10.0
+
+
+===== Windows PATH: npm =====
+C:\Program Files\nodejs\npm.cmd
+10.2.3
+
+
+===== Windows PATH: pnpm =====
+not installed on Windows PATH
+
+
+===== Windows PATH: git =====
+C:\Program Files\Git\cmd\git.exe
+git version 2.43.0.windows.1
+
+
+===== Docker version =====
+
+
+===== Docker compose =====
+
+
+===== Docker info =====
+
+
+===== Docker hello-world =====
+
+
+===== Listening ports of interest =====
+
+LocalAddress LocalPort OwningProcess Process 
+------------ --------- ------------- ------- 
+127.0.0.1         3000         30204 wslrelay
+::1               3000         30204 wslrelay
+127.0.0.1         5173         30204 wslrelay
+::1               5173         30204 wslrelay
+::1               8080         30204 wslrelay
+
+
+
+
+===== Reserved TCP port ranges (Hyper-V/WinNAT) =====
+
+Protocol tcp Port Exclusion Ranges
+
+Start Port    End Port      
+----------    --------      
+      2869        2869      
+     50000       50059     *
+     61539       61638      
+     61639       61738      
+     61739       61838      
+     61839       61938      
+     61939       62038      
+     62039       62138      
+     62139       62238      
+     62239       62338      
+
+* - Administered port exclusions.
+
+

@@ -1,0 +1,51 @@
+{
+  "name": "streamhub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=26.0.0 <27",
+    "pnpm": ">=12.18.0 <13"
+  },
+  "scripts": {
+    "env:check": "bash scripts/doctor.sh",
+    "env:init": "bash scripts/init-env.sh",
+    "env:sync": "bash scripts/env-sync.sh",
+    "infra:up": "bash scripts/infra-up.sh",
+    "infra:down": "bash scripts/infra-down.sh",
+    "infra:status": "docker compose ps",
+    "infra:logs": "bash scripts/logs.sh",
+    "infra:verify": "bash scripts/verify-infra.sh",
+    "infra:reset": "bash scripts/reset-dev-data.sh",
+    "infra:test-db": "bash scripts/mongo-test-db.sh",
+    "dev:api": "pnpm --filter @streamhub/api dev",
+    "admin:create": "pnpm --filter @streamhub/api admin:create",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm -r --if-present typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm -r --if-present test",
+    "test:integration": "pnpm -r --if-present test:integration",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "3.1164.0",
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.6",
+    "@types/nodemailer": "8.0.2",
+    "eslint": "10.14.0",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.14.0",
+    "ioredis": "6.0.0",
+    "mongodb": "7.8.0",
+    "nodemailer": "10.4.0",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.1.0"
+  }
+}

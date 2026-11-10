@@ -1,0 +1,13 @@
+# Force LF everywhere: the repo lives on an NTFS drive and is used from WSL.
+# CRLF in shell scripts breaks them ("bad interpreter: /bin/sh^M").
+* text=auto eol=lf
+*.sh text eol=lf
+
+*.mp4 binary
+*.mov binary
+*.mkv binary
+*.webm binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary

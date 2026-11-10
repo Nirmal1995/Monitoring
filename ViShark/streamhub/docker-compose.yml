@@ -1,0 +1,166 @@
+# StreamHub local infrastructure.
+# Application processes (api, worker, web) run on the host during development;
+# their containers are added in a later phase.
+name: streamhub
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
+services:
+  mongo:
+    image: mongo:8.0
+    entrypoint: ['bash', '/opt/streamhub/mongo-entrypoint.sh']
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?set in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set in .env}
+      MONGO_APP_DATABASE: ${MONGO_APP_DATABASE:?set in .env}
+      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME:?set in .env}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?set in .env}
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+      - ./docker/infra/mongo-entrypoint.sh:/opt/streamhub/mongo-entrypoint.sh:ro
+      - ./docker/infra/mongo-init-app-user.js:/docker-entrypoint-initdb.d/10-app-user.js:ro
+    ports:
+      - '127.0.0.1:${MONGO_PORT:-27017}:27017'
+    healthcheck:
+      # Initiates the single-node replica set on first run, then reports
+      # healthy only once this node is PRIMARY (writable).
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD"
+          --authenticationDatabase admin --eval
+          "try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }) };
+          quit(db.hello().isWritablePrimary ? 0 : 1)"
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    restart: on-failure:3
+    logging: *default-logging
+    networks: [backend]
+
+  redis:
+    image: redis:8.4-alpine
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?set in .env}
+      # BullMQ requires noeviction: evicting a queue key silently loses jobs.
+      - --maxmemory
+      - 200mb
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - 'yes'
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?set in .env}
+    volumes:
+      - redis-data:/data
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: on-failure:3
+    logging: *default-logging
+    networks: [backend]
+
+  storage:
+    # Silo: maintained community fork of MinIO (ADR-005). Pinned release.
+    image: pgsty/silo:RELEASE.2026-10-15T00-00-00Z
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ROOT_USER:?set in .env}
+      MINIO_ROOT_PASSWORD: ${STORAGE_ROOT_PASSWORD:?set in .env}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${STORAGE_CORS_ALLOW_ORIGIN:?set in .env}
+      MINIO_BROWSER_REDIRECT: 'off'
+    volumes:
+      - storage-data:/data
+    ports:
+      - '127.0.0.1:${STORAGE_API_PORT:-9000}:9000'
+      - '127.0.0.1:${STORAGE_CONSOLE_PORT:-9001}:9001'
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    restart: on-failure:3
+    logging: *default-logging
+    networks: [backend]
+
+  # One-shot job: creates buckets, the least-privilege app user and its policy.
+  # Idempotent: safe to run on every `infra:up`.
+  storage-init:
+    image: pgsty/silo:RELEASE.2026-10-15T00-00-00Z
+    entrypoint: ['sh', '/opt/streamhub/storage-init.sh']
+    environment:
+      STORAGE_ROOT_USER: ${STORAGE_ROOT_USER:?set in .env}
+      STORAGE_ROOT_PASSWORD: ${STORAGE_ROOT_PASSWORD:?set in .env}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in .env}
+      S3_BUCKET_UPLOADS: ${S3_BUCKET_UPLOADS:?set in .env}
+      S3_BUCKET_MEDIA: ${S3_BUCKET_MEDIA:?set in .env}
+    volumes:
+      - ./docker/infra/storage-init.sh:/opt/streamhub/storage-init.sh:ro
+    depends_on:
+      storage:
+        condition: service_healthy
+    restart: 'no'
+    logging: *default-logging
+    networks: [backend]
+
+  mailpit:
+    image: axllent/mailpit:v1.30.5
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    volumes:
+      - mailpit-data:/data
+    ports:
+      - '127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    restart: on-failure:3
+    logging: *default-logging
+    networks: [backend]
+
+networks:
+  backend:
+    name: streamhub-backend
+
+volumes:
+  mongo-data:
+  mongo-config:
+  redis-data:
+  storage-data:
+  mailpit-data:

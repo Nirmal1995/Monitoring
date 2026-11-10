@@ -1,0 +1,19 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Fail install on the wrong Node/pnpm version instead of only warning.
+engineStrict: true
+# Write exact versions (no ^ ranges) when adding dependencies.
+saveExact: true
+# Supply-chain guard: do not install versions published less than 24h ago.
+# Most malicious releases are detected and pulled within hours.
+minimumReleaseAge: 1440
+# Install scripts are blocked by default; only packages listed here may run them.
+# esbuild (used by tsx) verifies its platform binary on install.
+# @scarf/scarf (pulled in by swagger-ui-dist) only sends install analytics: denied.
+# argon2 (password hashing) selects its prebuilt native binary, or compiles one, on install.
+allowBuilds:
+  '@scarf/scarf': false
+  argon2: true
+  esbuild: true
