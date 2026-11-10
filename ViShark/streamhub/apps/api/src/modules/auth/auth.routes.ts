@@ -1,9 +1,17 @@
 import {
+  changePasswordBodySchema,
+  emailOnlyBodySchema,
   loginBodySchema,
   registerBodySchema,
+  resetPasswordBodySchema,
   sessionHandleParamsSchema,
+  verifyEmailBodySchema,
+  type ChangePasswordBody,
+  type EmailOnlyBody,
   type LoginBody,
   type RegisterBody,
+  type ResetPasswordBody,
+  type VerifyEmailBody,
 } from '@streamhub/contracts';
 import { Router, type Request, type Response } from 'express';
 import type { Redis } from 'ioredis';
@@ -13,6 +21,7 @@ import { requireAuth, requirePermission } from '../../middleware/authenticate.ts
 import { rateLimit } from '../../middleware/rate-limit.ts';
 import { validate } from '../../middleware/validate.ts';
 import { toUserDto } from '../users/user.dto.ts';
+import type { UserDocument } from '../users/user.model.ts';
 import type { AuthService } from './auth.service.ts';
 import { cookieName, randomToken } from './session.ts';
 import { listSessions, revokeOtherSessions, revokeSession } from './sessions.service.ts';
@@ -29,6 +38,27 @@ const destroy = (req: Request) =>
   new Promise<void>((resolve, reject) =>
     req.session.destroy((err) => (err ? reject(err as Error) : resolve())),
   );
+
+/**
+ * Starts a fresh authenticated session. The previous session ID (if any) is
+ * discarded: this is the session fixation defence, used at login and after a
+ * password change.
+ */
+async function startSession(req: Request, user: UserDocument): Promise<string> {
+  await regenerate(req);
+  const now = Date.now();
+  req.session.userId = user._id.toString();
+  req.session.handle = randomToken(16);
+  req.session.csrfToken = randomToken(32);
+  req.session.createdAt = now;
+  req.session.lastSeenAt = now;
+  req.session.userAgent = req.get('user-agent')?.slice(0, 256) ?? null;
+  req.session.ip = req.ip ?? null;
+  await save(req);
+  return req.session.csrfToken;
+}
+
+const ACCEPTED_MESSAGE = 'If an account exists for this email, we have sent instructions to it.';
 
 export function authRouter(deps: {
   auth: AuthService;
@@ -59,11 +89,7 @@ export function authRouter(deps: {
       return;
     }
     res.json(
-      ok({
-        authenticated: true,
-        user: toUserDto(req.user),
-        csrfToken: req.session.csrfToken,
-      }),
+      ok({ authenticated: true, user: toUserDto(req.user), csrfToken: req.session.csrfToken }),
     );
   });
 
@@ -84,28 +110,77 @@ export function authRouter(deps: {
   );
 
   router.post(
+    '/verify-email',
+    ipLimiter('verify'),
+    validate({ body: verifyEmailBodySchema }),
+    async (_req, res) => {
+      const { body } = res.locals.validated as { body: VerifyEmailBody };
+      await deps.auth.verifyEmail(body.token);
+      res.json(ok({ verified: true }));
+    },
+  );
+
+  router.post(
+    '/resend-verification',
+    ipLimiter('resend'),
+    validate({ body: emailOnlyBodySchema }),
+    async (_req, res) => {
+      const { body } = res.locals.validated as { body: EmailOnlyBody };
+      await deps.auth.resendVerification(body.email);
+      res.status(202).json(ok({ message: ACCEPTED_MESSAGE }));
+    },
+  );
+
+  router.post(
+    '/forgot-password',
+    ipLimiter('forgot'),
+    validate({ body: emailOnlyBodySchema }),
+    async (_req, res) => {
+      const { body } = res.locals.validated as { body: EmailOnlyBody };
+      await deps.auth.forgotPassword(body.email);
+      res.status(202).json(ok({ message: ACCEPTED_MESSAGE }));
+    },
+  );
+
+  router.post(
+    '/reset-password',
+    ipLimiter('reset'),
+    validate({ body: resetPasswordBodySchema }),
+    async (_req, res) => {
+      const { body } = res.locals.validated as { body: ResetPasswordBody };
+      await deps.auth.resetPassword(body);
+      res.json(ok({ message: 'Your password has been changed. Please sign in.' }));
+    },
+  );
+
+  router.post(
     '/login',
     ipLimiter('login'),
     validate({ body: loginBodySchema }),
     async (req, res) => {
       const { body } = res.locals.validated as { body: LoginBody };
       const user = await deps.auth.login(body);
-
-      // Session fixation defence: whatever session ID the browser had before
-      // login is discarded, and the authenticated session gets a fresh ID.
-      await regenerate(req);
-      const now = Date.now();
-      req.session.userId = user._id.toString();
-      req.session.handle = randomToken(16);
-      req.session.csrfToken = randomToken(32);
-      req.session.createdAt = now;
-      req.session.lastSeenAt = now;
-      req.session.userAgent = req.get('user-agent')?.slice(0, 256) ?? null;
-      req.session.ip = req.ip ?? null;
-      await save(req);
-
+      const csrfToken = await startSession(req, user);
       res.set('Cache-Control', 'no-store');
-      res.json(ok({ user: toUserDto(user), csrfToken: req.session.csrfToken }));
+      res.json(ok({ user: toUserDto(user), csrfToken }));
+    },
+  );
+
+  router.post(
+    '/change-password',
+    requireAuth,
+    ipLimiter('change-password'),
+    validate({ body: changePasswordBodySchema }),
+    async (req, res) => {
+      const { body } = res.locals.validated as { body: ChangePasswordBody };
+      const userId = req.session.userId ?? '';
+      const user = await deps.auth.changePassword(userId, body);
+      // Sign out every other device, then give this one a brand-new session
+      // (new ID, new CSRF token).
+      await revokeOtherSessions(userId, req.session.handle);
+      const csrfToken = await startSession(req, user);
+      res.set('Cache-Control', 'no-store');
+      res.json(ok({ csrfToken }));
     },
   );
 

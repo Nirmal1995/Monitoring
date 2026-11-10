@@ -198,3 +198,43 @@ Status: Accepted (Phase 3a)
 - Context: auth tests write and delete data; they must never touch development data. The assistant sandbox cannot pull Docker images, and mocking MongoDB would not test sessions, TTL indexes or transactions faithfully.
 - Decision: integration tests use database `<name>_test` and Redis DB 15, run files sequentially, and empty collections rather than dropping the database (the app user correctly lacks `dropDatabase`). `pnpm infra:test-db` grants the app user access to the test database on existing volumes. The sandbox runs MongoDB 8.3 server binaries from conda-forge with the same replica-set-plus-auth setup as the local stack.
 - Consequences: the same tests run in the sandbox and on the developer machine; the sandbox uses 8.3 while the local stack uses 8.0 (differences irrelevant to these features).
+
+## ADR-025: Email link tokens are hashed, single use and carried in the URL fragment
+
+Status: Accepted (Phase 3b-1)
+
+- Context: verification and reset links are bearer credentials. Anything that logs URLs (web servers, proxies, analytics, `Referer`) could leak them, and a database leak must not hand out working links.
+- Decision: 256-bit random tokens; only SHA-256 stored; consumed by one atomic `findOneAndDelete` with an expiry condition; TTL index cleanup; a new token replaces older ones. The link is `/verify-email#token=...`: the fragment never leaves the browser, and the web page POSTs it.
+- Consequences: links need JavaScript to complete (acceptable for a React app). A plain GET link would be simpler but would leak tokens and could be "used" by email scanners that prefetch links.
+
+## ADR-026: Emails are sent in the background and capped per address
+
+Status: Accepted (Phase 3b-1)
+
+- Context: if a response waits for SMTP only when an account exists, response time reveals which emails are registered. Public endpoints that send email can also be abused to flood an inbox.
+- Decision: the response is decided first; sending happens afterwards and failures are logged (`auth.email.<kind>.failed`). At most `AUTH_EMAIL_LIMIT_PER_HOUR` (default 3) emails per kind per address per hour, counted in Redis for any address.
+- Consequences: a user is not told if delivery failed; monitoring must watch the failure event. A durable outbox or queue (BullMQ arrives in Phase 6) would add retries; for now a lost email is recovered by "resend".
+
+## ADR-027: Offline common-password list instead of an online breach API
+
+Status: Accepted (Phase 3b-1)
+
+- Context: ASVS 2.1.7 and NIST 800-63B ask for checking passwords against known-breached lists. Online services (k-anonymity range APIs) need network access from the API and add a third-party dependency to registration.
+- Decision: a bundled list of 1,186 common passwords that meet our 12-character minimum (SecLists NCSC top 100k, MIT, filtered), compared case-insensitively, plus a check that the password is not the email.
+- Consequences: no network dependency, deterministic tests. Coverage is much smaller than a full breach corpus; an online check can be added later behind a feature flag.
+
+## ADR-028: Distinct `SESSION_EXPIRED` error
+
+Status: Accepted (Phase 3b-1)
+
+- Context: during manual testing, an idle-expired session returned the same `401 UNAUTHENTICATED` as a request without a cookie, which is confusing for users and the future UI.
+- Decision: if the request carries a session cookie that no longer maps to a valid session, return `401 SESSION_EXPIRED`; otherwise `401 UNAUTHENTICATED`.
+- Consequences: the UI can show "your session expired". No information leak: only the cookie holder sees it.
+
+## ADR-029: One module owns Mongoose safety settings, and tests load it
+
+Status: Accepted (Phase 3b-1)
+
+- Context: a real-server run found a 500 that 179 passing tests missed, because the tests did not load the global `sanitizeFilter` setting.
+- Decision: `database/mongoose-settings.ts` sets `sanitizeFilter`, `strictQuery` and `bufferCommands=false`; the connection module and the integration test setup both import it, and a test asserts the settings are active. Server-built operators in filters are wrapped in `mongoose.trusted()`.
+- Consequences: test and production behaviour match for queries. Every future intentional operator must be marked trusted, which makes such places easy to review.

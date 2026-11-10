@@ -31,18 +31,26 @@ Failure:
 
 ## Status codes
 
-| Status | Code                     | When                                                                                                  |
-| ------ | ------------------------ | ----------------------------------------------------------------------------------------------------- |
-| 400    | `BAD_REQUEST`            | validation failed (`details` lists each field)                                                        |
-| 400    | `INVALID_JSON`           | body is not parseable JSON                                                                            |
-| 401    | `UNAUTHENTICATED`        | no valid session                                                                                      |
-| 403    | `FORBIDDEN`              | authenticated but not allowed                                                                         |
-| 404    | `NOT_FOUND`              | unknown route or resource (also used instead of 403 where revealing existence would leak information) |
-| 409    | `CONFLICT`               | duplicate or invalid state transition                                                                 |
-| 413    | `PAYLOAD_TOO_LARGE`      | body over `API_BODY_LIMIT` (default 100 kB)                                                           |
-| 415    | `UNSUPPORTED_MEDIA_TYPE` | unsupported charset                                                                                   |
-| 500    | `INTERNAL_ERROR`         | anything unexpected; details are logged, never returned                                               |
-| 503    | none                     | readiness probe only                                                                                  |
+| Status | Code                                        | When                                                                                                  |
+| ------ | ------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 400    | `BAD_REQUEST`                               | validation failed (`details` lists each field)                                                        |
+| 400    | `INVALID_JSON`                              | body is not parseable JSON                                                                            |
+| 400    | `WEAK_PASSWORD`                             | password is too common or equals the email                                                            |
+| 400    | `INVALID_TOKEN`                             | verification or reset token is wrong, used or expired (always the same answer)                        |
+| 400    | `INVALID_CURRENT_PASSWORD`                  | change password: current password is wrong                                                            |
+| 401    | `UNAUTHENTICATED`                           | no valid session                                                                                      |
+| 401    | `INVALID_CREDENTIALS`                       | login failed (same for unknown email and wrong password)                                              |
+| 401    | `SESSION_EXPIRED`                           | a session cookie was sent but the session timed out or was revoked; sign in again                     |
+| 403    | `FORBIDDEN`                                 | authenticated but not allowed                                                                         |
+| 403    | `CSRF_FAILED`                               | missing or wrong `X-CSRF-Token`, or a cross-site `Origin`                                             |
+| 403    | `EMAIL_NOT_VERIFIED`, `ACCOUNT_DEACTIVATED` | correct password, but the account cannot sign in                                                      |
+| 404    | `NOT_FOUND`                                 | unknown route or resource (also used instead of 403 where revealing existence would leak information) |
+| 409    | `CONFLICT`                                  | duplicate or invalid state transition                                                                 |
+| 413    | `PAYLOAD_TOO_LARGE`                         | body over `API_BODY_LIMIT` (default 100 kB)                                                           |
+| 415    | `UNSUPPORTED_MEDIA_TYPE`                    | unsupported charset                                                                                   |
+| 429    | `TOO_MANY_REQUESTS`                         | rate limit; see the `Retry-After` header                                                              |
+| 500    | `INTERNAL_ERROR`                            | anything unexpected; details are logged, never returned                                               |
+| 503    | `SERVICE_UNAVAILABLE`                       | a dependency is down (for example Redis for rate limiting); readiness uses 503 with its own body      |
 
 ## Validation
 

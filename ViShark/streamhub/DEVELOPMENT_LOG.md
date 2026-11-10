@@ -181,14 +181,62 @@ Decisions confirmed with the user: split Phase 3 into 3a/3b; idle timeout 30 min
 
 ### Acceptance results (user's machine, first run)
 
-| Criterion                                                                    | Result                                                                                                                                                           |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install` (argon2 install script approved), `env:sync`, `infra:test-db` | pass                                                                                                                                                             |
-| `pnpm admin:create`                                                          | pass (admin created)                                                                                                                                             |
-| `pnpm check` (typecheck, lint, format, 98 unit and package tests)            | pass                                                                                                                                                             |
-| `pnpm test:integration`                                                      | 40/45 on first run; after the fix for error 6, `create-admin.test.ts` 5/5 (the real CLI launch took 56 s, confirming the diagnosis) and `admin-args.test.ts` 7/7 |
-| Manual check in Swagger UI (login, CSRF token, sessions, profile)            | pending                                                                                                                                                          |
+| Criterion                                                                    | Result                                                                                                                                                              |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install` (argon2 install script approved), `env:sync`, `infra:test-db` | pass                                                                                                                                                                |
+| `pnpm admin:create`                                                          | pass (admin created)                                                                                                                                                |
+| `pnpm check` (typecheck, lint, format, 98 unit and package tests)            | pass                                                                                                                                                                |
+| `pnpm test:integration`                                                      | 40/45 on first run; after the fix for error 6, `create-admin.test.ts` 5/5 (the real CLI launch took 56 s, confirming the diagnosis) and `admin-args.test.ts` 7/7    |
+| Manual check in Swagger UI (login, CSRF token, sessions, profile)            | pass: login, wrong password (401), CSRF token flow, session list, profile update; an update after 38 idle minutes correctly returned 401 (led to `SESSION_EXPIRED`) |
 
-### Pending (user)
+### Outcome
 
-- `pnpm install`, `pnpm env:sync`, `pnpm infra:test-db`, `pnpm admin:create ...`, `pnpm check`, `pnpm test:integration`, manual login via Swagger UI.
+Accepted by the user on 2026-11-10. Two usability findings from the manual check carried into 3b-1: Swagger showed placeholder examples (`"string"`), and an idle-expired session gave the same error as never having signed in.
+
+## 2026-11-10: Phase 3b-1, account email flows
+
+Phase 3b split into 3b-1 (email flows) and 3b-2 (admin TOTP MFA) to keep each checkpoint reviewable.
+
+### Completed
+
+- SMTP mailer (nodemailer to Mailpit locally) with background sending and an in-memory mailer for tests. HTML-escaped templates: verification, already-registered notice, password reset, password changed, account deactivated.
+- Single-use tokens for verification and reset: 256-bit random, stored as SHA-256, atomic consumption, TTL expiry, sent in the URL fragment.
+- Endpoints: `POST /auth/verify-email`, `/auth/resend-verification`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/change-password`, `POST /users/me/deactivate`.
+- Registration now emails a verification link, or notifies the existing owner on a duplicate.
+- Per-address email cap (3 per kind per hour), applied whether or not the account exists.
+- Common-password check (1,186 entries of 12+ characters from SecLists NCSC 100k, MIT, attribution in the file) and "password equals email" check, also in `admin:create`.
+- `401 SESSION_EXPIRED` for a cookie the server no longer accepts, distinct from `401 UNAUTHENTICATED`.
+- Swagger: realistic request examples and a per-status error example for every response.
+- Mongoose safety settings moved to `database/mongoose-settings.ts` and loaded by the integration tests too (see error 4).
+- Docs: authentication design (email flows, residual risks), collections, security events; ADR-025 to ADR-029.
+
+### Validation done in the assistant sandbox
+
+- 86 API unit tests, 27 package tests, 69 integration tests (new: 19 email-flow tests, real SMTP delivery to Mailpit, 3 Mongoose-settings tests).
+- Sabotage check: ten 3b-1 controls disabled one at a time (token single use, token hashing, token expiry, session revocation on reset, current-password check, password check on deactivate, email cap, common-password list, `SESSION_EXPIRED`, HTML escaping); every one made tests fail.
+- Real server with real SMTP to Mailpit, scripted with curl: register, weak password refused, unverified login refused, link read from Mailpit, verify, replay refused, login, change password, forgot for known and unknown emails, reset, old session revoked, reset replay refused, old password refused, new password accepted, deactivate, login refused, 5 emails delivered. 20/20 checks passed; no token or password in the logs.
+
+### Errors encountered
+
+1. Policy unit tests asserted on `message` while the reason is in `details[0].message`. Fix: assert on details.
+2. Lint: an inline `import()` type and an unused `_ignored` variable. Fix: proper type import; added `varsIgnorePattern: '^_'` to match the existing args rule.
+3. `pnpm install` needed again for nodemailer (lockfile change).
+4. **`POST /auth/verify-email` returned 500 on the real server while all 179 tests passed.**
+   - Symptom: `CastError: Cast to date failed for value "{ '$gt': ... }" at path "expiresAt"`.
+   - Root cause: the global `sanitizeFilter` setting (which blocks NoSQL injection) treats every operator in a query filter as untrusted input, including the server's own `{ $gt: now }`. The integration tests connected Mongoose directly and never loaded the module that applies the setting, so they ran with weaker settings than production.
+   - Fix: the operator is wrapped in `mongoose.trusted()`. The settings moved to `mongoose-settings.ts`, imported by both the connection module and the test setup, plus a test asserting each setting is active, that an injected `{ $ne: null }` is rejected and that trusted operators still work. With the old code the email-flow tests now fail (8 failures), so this class of bug cannot hide again.
+   - Lesson: the real-server run is not optional; it found what 179 green tests did not.
+5. The first curl run reported 6 failures. All were mistakes in the test script (wrong field name `newPassword` for reset, expected `200`/`401` where the API correctly returns `204` for deactivate and `403 ACCOUNT_DEACTIVATED` after a correct password). The API was right; the script was fixed.
+
+### Acceptance criteria
+
+| Criterion                                                                     | Result (sandbox) | Result (user's machine) |
+| ----------------------------------------------------------------------------- | ---------------- | ----------------------- |
+| `pnpm check` and `pnpm test:integration` pass                                 | pass             | pending                 |
+| Verification email arrives in Mailpit; link verifies once only                | pass             | pending                 |
+| Forgot password: same response for known and unknown emails; reset works once | pass             | pending                 |
+| Reset revokes all sessions; change revokes other sessions                     | pass             | pending                 |
+| Common passwords rejected; deactivated account cannot sign in                 | pass             | pending                 |
+| No tokens, passwords or session IDs in logs                                   | pass             | pending                 |
+
+Note: the Mailpit binary used in the sandbox was downloaded from its GitHub release without checksum verification. It is a sandbox-only test tool; the local stack uses the pinned `axllent/mailpit:v1.30.5` image.

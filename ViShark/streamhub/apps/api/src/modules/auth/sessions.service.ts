@@ -63,3 +63,9 @@ export async function revokeOtherSessions(
   });
   return result.deletedCount;
 }
+
+/** Revokes every session of a user, including the current one. */
+export async function revokeAllSessions(userId: string): Promise<number> {
+  const result = await collection().deleteMany({ 'session.userId': userId });
+  return result.deletedCount;
+}

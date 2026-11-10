@@ -92,6 +92,27 @@ describe('versioned API and docs', () => {
     expect(res.body.components.schemas.ErrorBody.type).toBe('object');
   });
 
+  it('documents every auth endpoint with real examples instead of generated placeholders', async () => {
+    const doc = (await request(buildTestApp().app).get('/api/v1/openapi.json')).body;
+    for (const path of [
+      'register',
+      'login',
+      'verify-email',
+      'resend-verification',
+      'forgot-password',
+      'reset-password',
+      'change-password',
+    ]) {
+      expect(doc.paths).toHaveProperty([`/api/v1/auth/${path}`]);
+    }
+    expect(doc.paths).toHaveProperty(['/api/v1/users/me/deactivate']);
+    expect(doc.components.schemas.LoginBody.properties.email.example).toBe('you@example.com');
+    expect(doc.components.responses.E401.content['application/json'].example.error.code).toBe(
+      'UNAUTHENTICATED',
+    );
+    expect(JSON.stringify(doc)).not.toContain('"$schema"');
+  });
+
   it('serves Swagger UI when docs are enabled', async () => {
     const res = await request(buildTestApp().app).get('/api/docs/');
     expect(res.status).toBe(200);

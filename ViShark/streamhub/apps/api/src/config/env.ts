@@ -84,6 +84,18 @@ const envSchema = z
     // Failed logins per email address per window, regardless of whether the account exists.
     AUTH_ACCOUNT_FAILURE_LIMIT: z.coerce.number().int().min(1).default(10),
     AUTH_ACCOUNT_FAILURE_WINDOW_SECONDS: z.coerce.number().int().min(1).default(900),
+    // Emails per address per hour from resend-verification and forgot-password
+    // (stops an attacker from mail-bombing someone through our app).
+    AUTH_EMAIL_LIMIT_PER_HOUR: z.coerce.number().int().min(1).default(3),
+    EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+    PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(240).default(30),
+
+    SMTP_HOST: z.string().min(1).default('127.0.0.1'),
+    SMTP_PORT: port.default(1025),
+    SMTP_SECURE: booleanFromString.default(false),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASSWORD: z.string().optional(),
+    MAIL_FROM: z.string().min(3).default('StreamHub <no-reply@streamhub.local>'),
   })
   .transform((env) => ({
     ...env,

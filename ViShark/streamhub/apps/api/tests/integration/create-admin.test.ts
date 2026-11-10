@@ -67,6 +67,7 @@ describe('createAdmin (in-process)', () => {
 
   it('enforces the password policy and creates nothing on failure', async () => {
     await expect(createAdmin(options, deps('short'))).rejects.toThrow(AdminBootstrapError);
+    await expect(createAdmin(options, deps('password1234'))).rejects.toThrow(/commonly used/);
     expect(await UserModel.countDocuments()).toBe(0);
   });
 });

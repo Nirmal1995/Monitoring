@@ -2,6 +2,8 @@ import { parseArgs } from 'node:util';
 import { displayNameSchema, emailSchema, passwordSchema } from '@streamhub/contracts';
 import type { Logger } from 'pino';
 import type { PasswordHasher } from '../auth/password.ts';
+import { assertPasswordAcceptable } from '../auth/password-policy.ts';
+import { AppError } from '../../common/errors.ts';
 import { UserModel } from '../users/user.model.ts';
 
 /**
@@ -76,6 +78,15 @@ export async function createAdmin(
   const password = passwordSchema.safeParse(await deps.readPassword());
   if (!password.success) {
     throw new AdminBootstrapError(`password ${password.error.issues[0]?.message ?? 'is invalid'}`);
+  }
+  try {
+    assertPasswordAcceptable(password.data, options.email);
+  } catch (err) {
+    const reason =
+      err instanceof AppError
+        ? (err.details as { message: string }[] | undefined)?.[0]?.message
+        : undefined;
+    throw new AdminBootstrapError(`password rejected: ${reason ?? 'not acceptable'}`);
   }
   const user = await UserModel.create({
     email: options.email,

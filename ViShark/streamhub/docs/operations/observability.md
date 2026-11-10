@@ -28,17 +28,25 @@ Local development: set `LOG_PRETTY=true` for colourised output (pino-pretty). Pr
 
 Authentication events carry an `event` field for filtering (CloudWatch Logs Insights: `filter event like /^auth\./`):
 
-| Event                                                                | Level     | Fields                                           |
-| -------------------------------------------------------------------- | --------- | ------------------------------------------------ |
-| `auth.register` / `auth.register.duplicate`                          | info      | `userId` or `email` fingerprint                  |
-| `auth.login.succeeded`                                               | info      | `userId`                                         |
-| `auth.login.failed`                                                  | warn      | `email` fingerprint (truncated SHA-256)          |
-| `auth.login.blocked`                                                 | info/warn | `userId`, `reason` (`unverified`, `deactivated`) |
-| `auth.logout`, `auth.session.revoked`, `auth.session.revoked_others` | info      | `userId`, `revoked`                              |
-| `auth.password.rehashed`                                             | info      | `userId`                                         |
-| `admin.created`, `admin.promoted`                                    | info      | `userId`, `via: cli`                             |
+| Event                                                                     | Level      | Fields                                                                        |
+| ------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------- |
+| `auth.register` / `auth.register.duplicate`                               | info       | `userId` or `email` fingerprint                                               |
+| `auth.login.succeeded`                                                    | info       | `userId`                                                                      |
+| `auth.login.failed`                                                       | warn       | `email` fingerprint (truncated SHA-256)                                       |
+| `auth.login.blocked`                                                      | info/warn  | `userId`, `reason` (`unverified`, `deactivated`)                              |
+| `auth.logout`, `auth.session.revoked`, `auth.session.revoked_others`      | info       | `userId`, `revoked`                                                           |
+| `auth.password.rehashed`                                                  | info       | `userId`                                                                      |
+| `admin.created`, `admin.promoted`                                         | info       | `userId`, `via: cli`                                                          |
+| `auth.email.verified`                                                     | info       | `userId`                                                                      |
+| `auth.password.reset_requested` / `auth.password.reset_requested_unknown` | info       | `userId` or `email` fingerprint                                               |
+| `auth.password.reset`, `auth.password.changed`                            | info       | `userId`, `revokedSessions`                                                   |
+| `auth.account.deactivated`                                                | info       | `userId`, `revokedSessions`                                                   |
+| `auth.email.limited`                                                      | warn       | `kind`, `email` fingerprint                                                   |
+| `auth.email.<kind>.sent` / `auth.email.<kind>.failed`                     | info/error | kind: `verification`, `duplicate`, `reset`, `password_changed`, `deactivated` |
 
 A spike in `auth.login.failed` across many fingerprints from few IPs suggests credential stuffing; the same fingerprint repeatedly suggests a targeted guess.
+
+Many `auth.email.limited` or `auth.password.reset_requested_unknown` events suggest someone probing addresses or trying to flood inboxes. Any `auth.email.*.failed` means SMTP (Mailpit locally, SES in AWS) is unreachable: users are not receiving their links.
 
 ## Health checks
 

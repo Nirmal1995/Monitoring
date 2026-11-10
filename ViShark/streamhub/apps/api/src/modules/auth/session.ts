@@ -4,7 +4,7 @@ import type { RequestHandler } from 'express';
 import session from 'express-session';
 import type { MongoClient } from 'mongodb';
 import type { AppConfig } from '../../config/env.ts';
-import { AppError } from '../../common/errors.ts';
+import { sessionExpired } from '../../middleware/authenticate.ts';
 
 /**
  * Server-side sessions stored in MongoDB.
@@ -89,9 +89,6 @@ export function createSessionMiddleware(options: {
     },
   });
 }
-
-export const sessionExpired = () =>
-  new AppError(401, 'SESSION_EXPIRED', 'Your session has expired, please sign in again');
 
 /**
  * Enforces idle and absolute timeouts on the server (the cookie lifetime is

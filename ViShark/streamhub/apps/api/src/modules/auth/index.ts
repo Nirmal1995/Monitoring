@@ -1,8 +1,9 @@
-import type { RequestHandler, Router } from 'express';
+import type { RequestHandler, Response, Router } from 'express';
 import type { Redis } from 'ioredis';
 import type { MongoClient } from 'mongodb';
 import type { Logger } from 'pino';
 import type { AppConfig } from '../../config/env.ts';
+import type { Mailer } from '../../infrastructure/mailer.ts';
 import { loadUser } from '../../middleware/authenticate.ts';
 import { csrfProtection } from '../../middleware/csrf.ts';
 import { requireDatabase } from '../../middleware/require-database.ts';
@@ -12,11 +13,17 @@ import { createAuthService } from './auth.service.ts';
 import { createLoginThrottle } from './login-throttle.ts';
 import { createPasswordHasher } from './password.ts';
 import {
+  cookieName,
   createSessionMiddleware,
   sessionPolicyFromConfig,
   sessionTimeouts,
   type SessionPolicy,
 } from './session.ts';
+import {
+  EmailVerificationTokenModel,
+  PasswordResetTokenModel,
+  createTokenStore,
+} from './tokens.ts';
 
 export type AuthModuleConfig = Pick<
   AppConfig,
@@ -34,6 +41,9 @@ export type AuthModuleConfig = Pick<
   | 'AUTH_IP_WINDOW_SECONDS'
   | 'AUTH_ACCOUNT_FAILURE_LIMIT'
   | 'AUTH_ACCOUNT_FAILURE_WINDOW_SECONDS'
+  | 'AUTH_EMAIL_LIMIT_PER_HOUR'
+  | 'EMAIL_VERIFICATION_TTL_HOURS'
+  | 'PASSWORD_RESET_TTL_MINUTES'
 >;
 
 export type AuthModule = {
@@ -47,12 +57,14 @@ export function createAuthModule(deps: {
   config: AuthModuleConfig;
   logger: Logger;
   redis: Redis;
+  mailer: Mailer;
   mongoClientPromise: Promise<MongoClient>;
   /** Tests override timeouts to seconds instead of minutes. */
   policy?: SessionPolicy;
 }): AuthModule {
   const { config } = deps;
   const policy = deps.policy ?? sessionPolicyFromConfig(config);
+  const sessionCookie = cookieName(config.COOKIE_SECURE);
   const auth = createAuthService({
     hasher: createPasswordHasher(config),
     throttle: createLoginThrottle(
@@ -61,8 +73,31 @@ export function createAuthModule(deps: {
       config.AUTH_ACCOUNT_FAILURE_WINDOW_SECONDS,
     ),
     logger: deps.logger,
-    requireEmailVerification: config.AUTH_REQUIRE_EMAIL_VERIFICATION,
+    mailer: deps.mailer,
+    redis: deps.redis,
+    verificationTokens: createTokenStore(
+      EmailVerificationTokenModel,
+      config.EMAIL_VERIFICATION_TTL_HOURS * 3_600_000,
+    ),
+    resetTokens: createTokenStore(
+      PasswordResetTokenModel,
+      config.PASSWORD_RESET_TTL_MINUTES * 60_000,
+    ),
+    settings: {
+      requireEmailVerification: config.AUTH_REQUIRE_EMAIL_VERIFICATION,
+      webOrigin: config.WEB_ORIGIN,
+      emailLimitPerHour: config.AUTH_EMAIL_LIMIT_PER_HOUR,
+      verificationTtlHours: config.EMAIL_VERIFICATION_TTL_HOURS,
+      resetTtlMinutes: config.PASSWORD_RESET_TTL_MINUTES,
+    },
   });
+  const clearSessionCookie = (res: Response) =>
+    res.clearCookie(sessionCookie, {
+      path: '/',
+      httpOnly: true,
+      secure: config.COOKIE_SECURE,
+      sameSite: 'lax',
+    });
 
   return {
     pipeline: [
@@ -70,7 +105,7 @@ export function createAuthModule(deps: {
       createSessionMiddleware({ config, policy, clientPromise: deps.mongoClientPromise }),
       sessionTimeouts(policy),
       csrfProtection([config.WEB_ORIGIN, ...config.CSRF_EXTRA_TRUSTED_ORIGINS]),
-      loadUser,
+      loadUser(sessionCookie),
     ],
     routes: [
       {
@@ -82,7 +117,7 @@ export function createAuthModule(deps: {
           limits: { ipLimit: config.AUTH_IP_LIMIT, ipWindowSeconds: config.AUTH_IP_WINDOW_SECONDS },
         }),
       },
-      { path: '/users', router: usersRouter() },
+      { path: '/users', router: usersRouter({ auth, clearSessionCookie }) },
     ],
   };
 }

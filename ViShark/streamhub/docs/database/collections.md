@@ -44,10 +44,26 @@ Managed by `connect-mongo` (`stringify: false`, so fields are queryable).
 
 Indexes: `{ expires: 1 }` TTL (`expireAfterSeconds: 0`, created by connect-mongo), `{ 'session.userId': 1 }` (list and revoke by user).
 
+## emailVerificationTokens and passwordResetTokens
+
+Same shape for both (one Mongoose model each, `src/modules/auth/tokens.ts`).
+
+| Field       | Type     | Notes                                                                    |
+| ----------- | -------- | ------------------------------------------------------------------------ |
+| `_id`       | ObjectId |                                                                          |
+| `userId`    | ObjectId | owner; indexed                                                           |
+| `tokenHash` | string   | **SHA-256 of the token**, unique; the token itself is only in the email  |
+| `expiresAt` | Date     | verification 24 h, reset 30 min; **TTL index** (`expireAfterSeconds: 0`) |
+| `createdAt` | Date     |                                                                          |
+
+Lifecycle: issuing a token deletes the user's older tokens of that kind; using one deletes it atomically (`findOneAndDelete`); a successful reset deletes all of the user's reset tokens. Expired documents are removed by MongoDB within about a minute, and the query also rejects them, so the TTL delay is never a window.
+
 ## Relationships
 
 ```
-users 1 ──── * sessions   (session.userId → users._id as string)
+users 1 ──── * sessions                  (session.userId → users._id as string)
+users 1 ──── * emailVerificationTokens   (userId)
+users 1 ──── * passwordResetTokens       (userId)
 ```
 
-Collections still to come: videos, categories, uploads, favourites, watchHistory, auditLogs, emailVerificationTokens, passwordResetTokens.
+Collections still to come: videos, categories, uploads, favourites, watchHistory, auditLogs.

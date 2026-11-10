@@ -3,14 +3,17 @@ import { fileURLToPath } from 'node:url';
 import type { Router } from 'express';
 import type { Redis } from 'ioredis';
 import mongoose from 'mongoose';
+// Production Mongoose safety settings: tests must run with exactly these.
+import '../../src/database/mongoose-settings.ts';
 import request from 'supertest';
 import { createApp } from '../../src/app.ts';
 import { loadConfig, type AppConfig } from '../../src/config/env.ts';
+import { createMemoryMailer, type Mailer } from '../../src/infrastructure/mailer.ts';
 import { createRedis } from '../../src/infrastructure/redis.ts';
 import { createAuthModule } from '../../src/modules/auth/index.ts';
 import { createPasswordHasher } from '../../src/modules/auth/password.ts';
 import type { SessionPolicy } from '../../src/modules/auth/session.ts';
-import { ensureSessionIndexes } from '../../src/modules/auth/sessions.service.ts';
+import { ensureIndexes } from '../../src/database/indexes.ts';
 import { HealthService } from '../../src/modules/health/health.service.ts';
 import { UserModel } from '../../src/modules/users/user.model.ts';
 import { silentLogger } from '../helpers.ts';
@@ -76,8 +79,7 @@ export async function resetTestData(): Promise<void> {
   for (const { name } of await db.listCollections({}, { nameOnly: true }).toArray()) {
     if (!name.startsWith('system.')) await db.collection(name).deleteMany({});
   }
-  await UserModel.init();
-  await ensureSessionIndexes();
+  await ensureIndexes();
   await redis?.flushdb();
 }
 
@@ -92,12 +94,15 @@ export function buildAuthApp(options: {
   config?: AppConfig;
   policy?: SessionPolicy;
   extraRoutes?: { path: string; router: Router }[];
+  /** Defaults to an in-memory mailer whose messages are discarded. */
+  mailer?: Mailer;
 }) {
   const config = options.config ?? testConfig();
   const auth = createAuthModule({
     config,
     logger: silentLogger,
     redis: options.redis,
+    mailer: options.mailer ?? createMemoryMailer().mailer,
     mongoClientPromise: Promise.resolve(mongoose.connection.getClient()),
     ...(options.policy ? { policy: options.policy } : {}),
   });

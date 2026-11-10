@@ -5,11 +5,12 @@ import { createApp } from './app.ts';
 import { ConfigError, loadConfig } from './config/env.ts';
 import { createMongoConnection } from './database/mongo.ts';
 import { createLogger } from './infrastructure/logger.ts';
+import { createSmtpMailer } from './infrastructure/mailer.ts';
 import { createMetricsApp } from './infrastructure/metrics-server.ts';
 import { createMetrics } from './infrastructure/metrics.ts';
 import { createRedis, pingRedis } from './infrastructure/redis.ts';
 import { createAuthModule } from './modules/auth/index.ts';
-import { ensureSessionIndexes } from './modules/auth/sessions.service.ts';
+import { ensureIndexes } from './database/indexes.ts';
 import { HealthService } from './modules/health/health.service.ts';
 
 const VERSION = process.env.npm_package_version ?? '0.1.0';
@@ -46,6 +47,7 @@ function main(): void {
     config,
     logger,
     redis,
+    mailer: createSmtpMailer(config),
     // Resolves once the first MongoDB connection succeeds; the session store waits on it.
     mongoClientPromise: mongoose.connection.asPromise().then((conn) => conn.getClient()),
   });
@@ -79,7 +81,7 @@ function main(): void {
     for (let attempt = 1; !shuttingDown; attempt++) {
       try {
         await mongo.connect();
-        if (config.NODE_ENV !== 'production') await ensureSessionIndexes();
+        if (config.NODE_ENV !== 'production') await ensureIndexes();
         return;
       } catch (err) {
         const delay = Math.min(30_000, 1000 * 2 ** Math.min(attempt - 1, 5));

@@ -2,7 +2,7 @@
 
 A video streaming platform built as a production-oriented engineering project: React, Node.js, MongoDB, S3-compatible object storage, FFmpeg/HLS, Redis/BullMQ, Docker, with AWS deployment planned for a later stage.
 
-> **Status: Phase 3a (authentication core).** Monorepo tooling, local infrastructure, the API foundation, and authentication: registration, login, server-side sessions, CSRF protection, role-based access control and the admin CLI. Email flows, password reset and admin MFA (Phase 3b), videos, the worker and the web app come next. See [the roadmap](docs/architecture/phase-0-environment-and-plan.md#5-implementation-roadmap).
+> **Status: Phase 3b-1 (account email flows).** Monorepo tooling, local infrastructure, the API foundation, and authentication: registration with email verification, login, server-side sessions, CSRF protection, role-based access control, password reset and change, account deactivation, a common-password check and the admin CLI. Admin MFA (Phase 3b-2), videos, the worker and the web app come next. See [the roadmap](docs/architecture/phase-0-environment-and-plan.md#5-implementation-roadmap).
 
 ## Prerequisites
 
@@ -107,3 +107,4 @@ docs/            architecture, operations, security, database, aws, testing
 - All infrastructure ports are bound to `127.0.0.1`, so they are not reachable from your network.
 - There is no default administrator. Create one with `pnpm admin:create`; the password is never passed on the command line.
 - Integration tests use `streamhub_test` and Redis DB 15, never your development data.
+- Emails never leave your machine locally: they go to Mailpit at http://127.0.0.1:8025.
